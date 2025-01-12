@@ -1,0 +1,10 @@
+f(int x, int y): int {
+    if (x < 0) {
+        y = x + y + x - 42
+        x = y + x
+    } else {
+        y = y - x - x + 42
+        x = y - x
+    }
+    return y
+}
