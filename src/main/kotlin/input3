@@ -1,0 +1,4 @@
+f(int x, int a, int b, int c): int {
+    x = a - a
+    return x
+}

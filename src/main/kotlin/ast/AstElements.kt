@@ -20,14 +20,14 @@ sealed class ExprNode(val exprType: ValueType)
 class InvalidExpr(exprType: ValueType) : ExprNode(exprType)
 
 class VariableRef(val identifier: String, exprType: ValueType) : ExprNode(exprType) {
-    override fun toString(): String = "'$identifier'"
+    override fun toString(): String = identifier
 }
 
-class IntConst(private val value: Long) : ExprNode(ValueType.INT_VAL) {
+class IntConst(val value: Long) : ExprNode(ValueType.INT_VAL) {
     override fun toString(): String = value.toString()
 }
 
-class BoolConst(private val value: Boolean) : ExprNode(ValueType.BOOL_VAL) {
+class BoolConst(val value: Boolean) : ExprNode(ValueType.BOOL_VAL) {
     override fun toString(): String = value.toString()
 }
 
@@ -47,6 +47,8 @@ class UnaryOp(val kind: UnaryKind, val subExpr: ExprNode, exprType: ValueType) :
 enum class BinaryKind {
     ADD,
     SUB,
+    MUL,
+    DIV,
     LESS,
     GREATER,
     LAND,
@@ -56,6 +58,8 @@ enum class BinaryKind {
         when (this) {
             ADD -> "+"
             SUB -> "-"
+            MUL -> "*"
+            DIV -> "/"
             LESS -> "<"
             GREATER -> ">"
             LAND -> "&"
@@ -64,7 +68,31 @@ enum class BinaryKind {
 }
 
 class BinaryOp(val kind: BinaryKind, val lhs: ExprNode, val rhs: ExprNode, exprType: ValueType) : ExprNode(exprType) {
-    override fun toString(): String = "$lhs $kind $rhs"
+    override fun toString(): String {
+        val lhsStr = lhs.toString()
+        val rhsStr = rhs.toString()
+
+        return when (kind) {
+            BinaryKind.ADD -> {
+                when {
+                    rhs is IntConst && rhs.value < 0 -> "$lhsStr - ${-rhs.value}"
+                    else -> "$lhsStr + $rhsStr"
+                }
+            }
+            BinaryKind.SUB -> {
+                when {
+                    rhs is IntConst && rhs.value < 0 -> "$lhsStr + ${-rhs.value}"
+                    else -> "$lhsStr - $rhsStr"
+                }
+            }
+            BinaryKind.MUL -> "$lhsStr * $rhsStr"
+            BinaryKind.DIV -> "$lhsStr / $rhsStr"
+            BinaryKind.LESS -> "$lhsStr < $rhsStr"
+            BinaryKind.GREATER -> "$lhsStr > $rhsStr"
+            BinaryKind.LAND -> "$lhsStr & $rhsStr"
+            BinaryKind.LOR -> "$lhsStr | $rhsStr"
+        }
+    }
 }
 
 sealed class StmtNode
@@ -89,3 +117,4 @@ data class FuncDefn(
     var retValueType: ValueType?,
     var retExpr: ExprNode?
 )
+

@@ -9,17 +9,20 @@ import java.io.FileInputStream
 import java.io.PrintWriter
 import java.nio.file.Files
 import java.nio.file.Paths
-import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
-    val inputPath = Paths.get("/Users/romajan4/IdeaProjects/PO4/src/main/kotlin/input")
-    val outputPath = Paths.get("/Users/romajan4/IdeaProjects/PO4/src/main/kotlin/output")
+    val inputPath = Paths.get("/Users/romajan4/Desktop/учеба/Тестирование ПО/kroos/hw4-testing/src/main/kotlin/input6")
+    val outputPath = Paths.get("/Users/romajan4/Desktop/учеба/Тестирование ПО/kroos/hw4-testing/src/main/kotlin/output6")
     if (!Files.exists(inputPath)) {
         throw RuntimeException("File not found: $inputPath")
     }
 
     val inputText = CharStreams.fromStream(FileInputStream(inputPath.toFile()))
-    val parser = mygrammarParser(CommonTokenStream(mygrammarLexer(inputText)))
+    val parser = mygrammarParser(
+        CommonTokenStream(
+            mygrammarLexer(inputText)
+        )
+    )
     if (parser.numberOfSyntaxErrors > 0) {
         throw RuntimeException("detected syntax error in $inputPath")
     }

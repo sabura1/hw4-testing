@@ -1,0 +1,4 @@
+f(int x, int a, int b, int c): int {
+    x = 10 + a + b + c + b + a + 42
+    return x
+}

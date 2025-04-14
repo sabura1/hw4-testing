@@ -111,18 +111,22 @@ private class ASTMakerImpl : ASTMaker() {
         if (exprStack.isEmpty()) {
             throw RuntimeException("expression stack is empty at assign")
         }
+
         val rhs = popExpr()
+
         val varName = ctx.NAME().text
         val parameterIndex = paramIndices[varName]
         if (parameterIndex == null) {
             reportError("unresolved reference to $varName in assignment lhs")
             return pushStmt(InvalidStmt)
         }
+
         val parameterType = funcDefn.parameters[parameterIndex].type
         if (parameterType != rhs.exprType) {
             reportError("expected type $parameterType of assignment rhs, found ${rhs.exprType}")
             return pushStmt(InvalidStmt)
         }
+
         pushStmt(AssignStmt(varName, rhs))
     }
 
@@ -198,6 +202,12 @@ private class ASTMakerImpl : ASTMaker() {
         } else if (ctx.BINOP_SUB() != null) {
             handleBinaryOp(BinaryKind.SUB, ValueType.INT_VAL, ValueType.INT_VAL)
         }
+        else if (ctx.BINOP_MUL() != null) {
+            handleBinaryOp(BinaryKind.MUL, ValueType.INT_VAL, ValueType.INT_VAL)
+        }
+        else if (ctx.BINOP_DIV() != null) {
+            handleBinaryOp(BinaryKind.DIV, ValueType.INT_VAL, ValueType.INT_VAL)
+        }
     }
 
     override fun enterIntliteral(ctx: mygrammarParser.IntliteralContext) {
@@ -271,6 +281,126 @@ private class ASTMakerImpl : ASTMaker() {
             throw RuntimeException(
                 "need at least two expressions in the stack for a binary operator"
             )
+        }
+    }
+}
+class ExprSimplifier {
+    fun simplify(expr: ExprNode): ExprNode {
+        val (terms, constant, leftovers) = collectTerms(expr)
+        return buildExpr(terms, constant, leftovers)
+    }
+
+    private fun extractCoeffAndVar(expr: BinaryOp): Pair<Long?, VariableRef?> {
+        return when {
+            expr.kind != BinaryKind.MUL -> Pair(null, null)
+
+            expr.lhs is IntConst && expr.rhs is VariableRef ->
+                Pair(expr.lhs.value, expr.rhs)
+
+            expr.rhs is IntConst && expr.lhs is VariableRef ->
+                Pair(expr.rhs.value, expr.lhs)
+
+            else -> Pair(null, null)
+        }
+    }
+
+    private fun collectTerms(expr: ExprNode): Triple<MutableMap<String, Long>, Long, MutableList<ExprNode>> {
+        val terms = mutableMapOf<String, Long>()
+        var constant = 0L
+        val leftovers = mutableListOf<ExprNode>()
+
+        fun withSign(e: ExprNode, sign: Long): ExprNode {
+            return if (sign == 1L) e
+            else BinaryOp(BinaryKind.MUL, IntConst(sign), e, ValueType.INT_VAL)
+        }
+
+        fun walk(e: ExprNode, sign: Long) {
+            //println("walk(): expr = $e, sign = $sign")
+
+            when (e) {
+                is IntConst -> {
+                    constant += sign * e.value
+                    // println("  ➤ IntConst: ${e.value} * $sign = ${sign * e.value}, total constant = $constant")
+                }
+
+                is VariableRef -> {
+                    val old = terms.getOrDefault(e.identifier, 0L)
+                    terms[e.identifier] = old + sign
+                    // println("  ➤ VariableRef: ${e.identifier}, coeff += $sign → ${terms[e.identifier]}")
+                }
+
+                is UnaryOp -> {
+                    leftovers.add(withSign(e, sign))
+                }
+
+                is BinaryOp -> {
+                    // println("  ➤ BinaryOp: kind = ${e.kind}, lhs = ${e.lhs}, rhs = ${e.rhs}")
+                    when (e.kind) {
+                        BinaryKind.ADD -> {
+                            walk(e.lhs, sign)
+                            walk(e.rhs, sign)
+                        }
+
+                        BinaryKind.SUB -> {
+                            walk(e.lhs, sign)
+                            walk(e.rhs, -sign)
+                        }
+
+                        BinaryKind.MUL -> {
+                            val (coeff, variable) = extractCoeffAndVar(e)
+                            if (coeff != null && variable != null) {
+                                val old = terms.getOrDefault(variable.identifier, 0L)
+                                terms[variable.identifier] = old + sign * coeff
+                                // println("  ➤ MUL: ${coeff} * ${variable.identifier} * $sign = ${sign * coeff}, total = ${terms[variable.identifier]}")
+                            } else {
+                                leftovers.add(withSign(e, sign))
+                            }
+                        }
+
+                        else -> {
+                            leftovers.add(withSign(e, sign))
+                        }
+                    }
+                }
+
+                else -> {
+                    leftovers.add(withSign(e, sign))
+                }
+            }
+        }
+
+        walk(expr, 1L)
+        return Triple(terms, constant, leftovers)
+    }
+
+    private fun buildExpr(
+        terms: Map<String, Long>,
+        constant: Long,
+        leftovers: List<ExprNode>
+    ): ExprNode {
+        val components = mutableListOf<ExprNode>()
+
+        for ((name, coeff) in terms) {
+            if (coeff == 0L) continue
+            val variable = VariableRef(name, ValueType.INT_VAL)
+            val termExpr = when (coeff) {
+                1L -> variable
+                -1L -> BinaryOp(BinaryKind.SUB, IntConst(0), variable, ValueType.INT_VAL)
+                else -> BinaryOp(BinaryKind.MUL, IntConst(coeff), variable, ValueType.INT_VAL)
+            }
+            components.add(termExpr)
+        }
+
+        if (constant != 0L) {
+            components.add(IntConst(constant))
+        }
+
+        components.addAll(leftovers)
+
+        return when {
+            components.isEmpty() -> IntConst(0)
+            components.size == 1 -> components.first()
+            else -> components.reduce { acc, expr -> BinaryOp(BinaryKind.ADD, acc, expr, ValueType.INT_VAL) }
         }
     }
 }
